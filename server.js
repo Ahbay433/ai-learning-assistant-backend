@@ -26,15 +26,14 @@ const app = express();
 /* -----------------------------------------------------
    ENV CHECK
 ----------------------------------------------------- */
-console.log("GROQ KEY LOADED:", !!process.env.GROQ_API_KEY);
 console.log("MONGODB URI LOADED:", !!process.env.MONGODB_URI);
-
-if (!process.env.GROQ_API_KEY) {
-  console.error("❌ GROQ_API_KEY missing in .env");
-}
+console.log("GROQ KEY LOADED:", !!process.env.GROQ_API_KEY);
 
 if (!process.env.MONGODB_URI) {
-  console.error("❌ MONGODB_URI missing in .env");
+  console.error("❌ MONGODB_URI missing");
+}
+if (!process.env.GROQ_API_KEY) {
+  console.error("❌ GROQ_API_KEY missing");
 }
 
 /* -----------------------------------------------------
@@ -43,22 +42,28 @@ if (!process.env.MONGODB_URI) {
 connectDB();
 
 /* -----------------------------------------------------
-   CORS (✅ FIXED FOR withCredentials)
+   ✅ CORS (Node 22 SAFE)
 ----------------------------------------------------- */
 const allowedOrigins = [
-  "http://localhost:5173", // Vite frontend
+  "http://localhost:5173",
+  "https://ai-learning-assistant-frontend-five.vercel.app",
+  "https://ai-learning-assistant-backend-4kro.onrender.com",
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
+      // Allow Postman / server-to-server
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
       }
+
+      console.error("❌ CORS blocked:", origin);
+      return callback(new Error("Not allowed by CORS"));
     },
-    credentials: true, // ✅ REQUIRED for cookies / auth
+    credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
