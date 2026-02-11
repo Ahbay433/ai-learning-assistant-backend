@@ -52,7 +52,7 @@ export const generateFlashcards = async (req, res) => {
 
     const flashcardSet = await Flashcard.create({
       userId: req.user.id,
-      documentId,
+      documentId, // ✅ keep consistent
       cards,
     });
 
@@ -66,6 +66,44 @@ export const generateFlashcards = async (req, res) => {
     return res.status(500).json({
       success: false,
       error: "Failed to generate flashcards",
+    });
+  }
+};
+
+/**
+ * =========================
+ * ✅ GET FLASHCARDS BY DOCUMENT
+ * =========================
+ */
+export const getFlashcardsByDocument = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+
+    if (!req.user?.id) {
+      return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+
+    const flashcardSet = await Flashcard.findOne({
+      documentId,            // ✅ FIX: was "document"
+      userId: req.user.id,
+    });
+
+    if (!flashcardSet) {
+      return res.status(404).json({
+        success: false,
+        error: "Flashcards not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: flashcardSet,
+    });
+  } catch (error) {
+    console.error("GET FLASHCARDS ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch flashcards",
     });
   }
 };
@@ -281,19 +319,7 @@ export const explainConcept = async (req, res) => {
       3
     );
 
-    if (!relevantChunks.length) {
-      return res.status(200).json({
-        success: true,
-        data: {
-          explanation:
-            "The concept could not be found clearly in this document.",
-        },
-      });
-    }
-
-    const context = relevantChunks
-      .map(chunk => chunk.content)
-      .join("\n\n");
+    const context = relevantChunks.map(c => c.content).join("\n\n");
 
     const explanation = await groqService.explainConcept(
       concept,
@@ -315,7 +341,7 @@ export const explainConcept = async (req, res) => {
 
 /**
  * =========================
- * ✅ DELETE FLASHCARD SET (FIX)
+ * Delete Flashcard Set
  * =========================
  */
 export const deleteFlashcardSet = async (req, res) => {

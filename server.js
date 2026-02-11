@@ -24,7 +24,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 /* -----------------------------------------------------
-   ENV CHECK (CORRECT VARIABLES)
+   ENV CHECK
 ----------------------------------------------------- */
 console.log("GROQ KEY LOADED:", !!process.env.GROQ_API_KEY);
 console.log("MONGODB URI LOADED:", !!process.env.MONGODB_URI);
@@ -43,20 +43,36 @@ if (!process.env.MONGODB_URI) {
 connectDB();
 
 /* -----------------------------------------------------
-   MIDDLEWARE
+   CORS (✅ FIXED FOR withCredentials)
 ----------------------------------------------------- */
+const allowedOrigins = [
+  "http://localhost:5173", // Vite frontend
+];
+
 app.use(
   cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true, // ✅ REQUIRED for cookies / auth
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
+/* -----------------------------------------------------
+   BODY PARSERS
+----------------------------------------------------- */
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Static uploads
+/* -----------------------------------------------------
+   STATIC FILES
+----------------------------------------------------- */
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 /* -----------------------------------------------------

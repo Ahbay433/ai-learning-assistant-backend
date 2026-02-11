@@ -4,51 +4,76 @@ import Groq from "groq-sdk";
 dotenv.config();
 
 /* -----------------------------------------------------
-   INITIALIZE GROQ
+   ENV VALIDATION
 ----------------------------------------------------- */
 if (!process.env.GROQ_API_KEY) {
   console.error("❌ GROQ_API_KEY is missing");
   throw new Error("GROQ_API_KEY not found in environment variables");
 }
 
+/* -----------------------------------------------------
+   INITIALIZE GROQ
+----------------------------------------------------- */
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-// You can change to "llama3-8b-8192" for faster responses
-const MODEL = "llama3-70b-8192";
+/* -----------------------------------------------------
+   SUPPORTED MODELS (UPDATED ✅)
+----------------------------------------------------- */
+// ✅ Fast + reliable (recommended)
+const PRIMARY_MODEL = "llama-3.1-8b-instant";
+
+// ✅ Fallback (optional, higher quality)
+const FALLBACK_MODEL = "llama-3.1-70b-versatile";
 
 /* -----------------------------------------------------
-   HELPER: SAFE GROQ CALL
+   HELPER: SAFE GROQ CALL WITH FALLBACK
 ----------------------------------------------------- */
 const callGroq = async (prompt) => {
-  const completion = await groq.chat.completions.create({
-    model: MODEL,
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.7,
-  });
+  try {
+    const completion = await groq.chat.completions.create({
+      model: PRIMARY_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.6,
+      max_tokens: 1024,
+    });
 
-  if (
-    !completion ||
-    !completion.choices ||
-    !completion.choices[0]?.message?.content
-  ) {
-    throw new Error("Empty response from Groq");
+    const content = completion?.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error("Empty response from Groq");
+    }
+
+    return content;
+  } catch (err) {
+    console.warn("⚠️ Primary Groq model failed, trying fallback...");
+
+    // 🔁 Fallback model
+    const completion = await groq.chat.completions.create({
+      model: FALLBACK_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.6,
+      max_tokens: 1024,
+    });
+
+    const content = completion?.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error("Empty response from Groq (fallback)");
+    }
+
+    return content;
   }
-
-  return completion.choices[0].message.content;
 };
 
 /* -----------------------------------------------------
    GENERATE FLASHCARDS
 ----------------------------------------------------- */
 export const generateFlashcards = async (text, count = 10) => {
-  try {
-    if (!text || !text.trim()) {
-      throw new Error("Empty document text");
-    }
+  if (!text?.trim()) {
+    throw new Error("Empty document text");
+  }
 
-    const prompt = `
+  const prompt = `
 Generate exactly ${count} educational flashcards.
 
 Format:
@@ -62,6 +87,7 @@ TEXT:
 ${text.slice(0, 12000)}
 `;
 
+  try {
     const output = await callGroq(prompt);
     const cards = [];
 
@@ -72,7 +98,6 @@ ${text.slice(0, 12000)}
 
       for (const line of block.split("\n")) {
         const l = line.trim();
-
         if (l.startsWith("Q:")) question = l.slice(2).trim();
         else if (l.startsWith("A:")) answer = l.slice(2).trim();
         else if (l.startsWith("D:")) {
@@ -89,7 +114,7 @@ ${text.slice(0, 12000)}
     return cards.slice(0, count);
   } catch (err) {
     console.error("❌ Groq flashcards error:", err.message);
-    throw err;
+    throw new Error("Failed to generate flashcards");
   }
 };
 
@@ -97,12 +122,11 @@ ${text.slice(0, 12000)}
    GENERATE QUIZ
 ----------------------------------------------------- */
 export const generateQuiz = async (text, count = 5) => {
-  try {
-    if (!text || !text.trim()) {
-      throw new Error("Empty document text");
-    }
+  if (!text?.trim()) {
+    throw new Error("Empty document text");
+  }
 
-    const prompt = `
+  const prompt = `
 Generate exactly ${count} multiple-choice questions.
 
 Format:
@@ -121,6 +145,7 @@ TEXT:
 ${text.slice(0, 12000)}
 `;
 
+  try {
     const output = await callGroq(prompt);
     const questions = [];
 
@@ -133,15 +158,12 @@ ${text.slice(0, 12000)}
 
       for (const line of block.split("\n")) {
         const l = line.trim();
-
         if (l.startsWith("Q:")) question = l.slice(2).trim();
-        else if (/^[1-4]:/.test(l) && options.length < 4) {
+        else if (/^[1-4]:/.test(l) && options.length < 4)
           options.push(l.slice(2).trim());
-        } else if (l.startsWith("C:")) {
-          correctAnswer = l.slice(2).trim();
-        } else if (l.startsWith("E:")) {
-          explanation = l.slice(2).trim();
-        } else if (l.startsWith("D:")) {
+        else if (l.startsWith("C:")) correctAnswer = l.slice(2).trim();
+        else if (l.startsWith("E:")) explanation = l.slice(2).trim();
+        else if (l.startsWith("D:")) {
           const d = l.slice(2).trim().toLowerCase();
           if (["easy", "medium", "hard"].includes(d)) difficulty = d;
         }
@@ -161,7 +183,7 @@ ${text.slice(0, 12000)}
     return questions.slice(0, count);
   } catch (err) {
     console.error("❌ Groq quiz error:", err.message);
-    throw err;
+    throw new Error("Failed to generate quiz");
   }
 };
 
@@ -169,22 +191,22 @@ ${text.slice(0, 12000)}
    GENERATE SUMMARY
 ----------------------------------------------------- */
 export const generateSummary = async (text) => {
-  try {
-    if (!text || !text.trim()) {
-      throw new Error("Empty document text");
-    }
+  if (!text?.trim()) {
+    throw new Error("Empty document text");
+  }
 
-    const prompt = `
+  const prompt = `
 Summarize the following text clearly and concisely.
 
 TEXT:
 ${text.slice(0, 12000)}
 `;
 
+  try {
     return await callGroq(prompt);
   } catch (err) {
     console.error("❌ Groq summary error:", err.message);
-    throw err;
+    throw new Error("Failed to generate summary");
   }
 };
 
@@ -192,14 +214,13 @@ ${text.slice(0, 12000)}
    CHAT WITH DOCUMENT
 ----------------------------------------------------- */
 export const chatWithDocument = async (chunks, question) => {
-  try {
-    if (!chunks?.length || !question) {
-      throw new Error("Missing chunks or question");
-    }
+  if (!chunks?.length || !question) {
+    throw new Error("Missing chunks or question");
+  }
 
-    const context = chunks.map((c) => c.content).join("\n\n");
+  const context = chunks.map((c) => c.content).join("\n\n");
 
-    const prompt = `
+  const prompt = `
 Answer ONLY using the context below.
 If the answer is not present, reply: "Not found in document".
 
@@ -210,10 +231,11 @@ QUESTION:
 ${question}
 `;
 
+  try {
     return await callGroq(prompt);
   } catch (err) {
     console.error("❌ Groq chat error:", err.message);
-    throw err;
+    throw new Error("Failed to answer question");
   }
 };
 
@@ -221,21 +243,21 @@ ${question}
    EXPLAIN CONCEPT
 ----------------------------------------------------- */
 export const explainConcept = async (concept, context) => {
-  try {
-    if (!concept || !context) {
-      throw new Error("Missing concept or context");
-    }
+  if (!concept || !context) {
+    throw new Error("Missing concept or context");
+  }
 
-    const prompt = `
+  const prompt = `
 Explain the concept "${concept}" using the context below.
 
 CONTEXT:
 ${context.slice(0, 10000)}
 `;
 
+  try {
     return await callGroq(prompt);
   } catch (err) {
     console.error("❌ Groq explain error:", err.message);
-    throw err;
+    throw new Error("Failed to explain concept");
   }
 };
